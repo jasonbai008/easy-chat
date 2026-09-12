@@ -7,4 +7,11 @@
   </defs>
   <rect width="64" height="64" rx="21.333" fill="#07080d" />
   <rect width="64" height="64" rx="21.333" fill="url(#g)" />
+  <g fill="#111318">
+    <rect x="17.7" y="26.5" width="3" height="11" rx="1.5" />
+    <rect x="24.1" y="22" width="3" height="20" rx="1.5" />
+    <rect x="30.5" y="19" width="3" height="26" rx="1.5" />
+    <rect x="36.9" y="24" width="3" height="16" rx="1.5" />
+    <rect x="43.3" y="21.5" width="3" height="21" rx="1.5" />
+  </g>
 </svg>
