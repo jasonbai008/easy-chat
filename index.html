@@ -4,12 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#07080d" />
-    <link
-      rel="icon"
-      type="image/svg+xml"
-      href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="%2307080d"/><path d="M14 32c8-12 28-12 36 0" fill="none" stroke="%233ee0c5" stroke-width="4" stroke-linecap="round"/><path d="M20 32c5-7 19-7 24 0" fill="none" stroke="%23ffb45a" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="32" r="4" fill="%23fff"/></svg>'
-    />
-    <title>Easy Talk · 同声传译</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <title>Easy Chat · 同声传译</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
 
@@ -17,14 +13,9 @@
     <div class="app" id="app">
       <header class="header">
         <div class="brand">
-          <div class="mark" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M2 9c3.5-5 10.5-5 14 0" stroke="#081018" stroke-width="1.8" stroke-linecap="round" />
-              <path d="M5 9c2-3 6-3 8 0" stroke="#081018" stroke-width="1.8" stroke-linecap="round" />
-            </svg>
-          </div>
+          <div class="mark" aria-hidden="true"></div>
           <div class="titles">
-            <h1>Easy Talk</h1>
+            <h1>Easy Chat</h1>
             <p>Gemini 3.5 Live Translate</p>
           </div>
         </div>
@@ -165,6 +156,8 @@
       let outputLiveEl = null;
       let inputTranscript = "";
       let outputTranscript = "";
+      let inputSealed = "";
+      let outputSealed = "";
       let lastInputLang = "";
       const history = [];
 
@@ -330,8 +323,8 @@
         sourceHintEl.textContent = isTwoWay() ? "我说 / 识别" : "识别";
         sourceLangTagEl.textContent = (lastDetectedCode || sourceLang).toUpperCase();
         targetLangTagEl.textContent = targetLang;
-        sourceBtn.classList.toggle("active", pickerSide === "source" && !langSheetEl.classList.contains("hidden"));
-        targetBtn.classList.toggle("active", pickerSide === "target" && !langSheetEl.classList.contains("hidden"));
+        sourceBtn.classList.toggle("active", pickerSide === "source" && langSheetEl.classList.contains("open"));
+        targetBtn.classList.toggle("active", pickerSide === "target" && langSheetEl.classList.contains("open"));
       }
 
       function renderLangPicker() {
@@ -369,16 +362,32 @@
         }
       }
 
+      let sheetHideTimer = 0;
+
       function openSheet(sheet) {
+        clearTimeout(sheetHideTimer);
         maskEl.classList.remove("hidden");
         sheet.classList.remove("hidden");
         refreshLangUI();
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            maskEl.classList.add("open");
+            sheet.classList.add("open");
+            refreshLangUI();
+          });
+        });
       }
 
       function closeSheets() {
-        maskEl.classList.add("hidden");
-        langSheetEl.classList.add("hidden");
+        maskEl.classList.remove("open");
+        langSheetEl.classList.remove("open");
         refreshLangUI();
+        sheetHideTimer = setTimeout(() => {
+          if (!langSheetEl.classList.contains("open")) {
+            maskEl.classList.add("hidden");
+            langSheetEl.classList.add("hidden");
+          }
+        }, 400);
       }
 
       function openLangPicker(side) {
@@ -432,10 +441,51 @@
       function hideEmpty(side) {
         if (side === "source" && sourceEmptyEl) {
           sourceEmptyEl.remove();
+          sourceEmptyEl = null;
         }
         if (side === "target" && targetEmptyEl) {
           targetEmptyEl.remove();
+          targetEmptyEl = null;
         }
+      }
+
+      function joinFragment(existing, fragment) {
+        if (!fragment) {
+          return existing;
+        }
+        if (!existing) {
+          return fragment;
+        }
+        if (/[A-Za-z0-9]$/.test(existing) && /^[A-Za-z0-9("'“‘]/.test(fragment)) {
+          return existing + " " + fragment;
+        }
+        return existing + fragment;
+      }
+
+      function extractCompletedSentences(text) {
+        if (!text) {
+          return { completed: [], remaining: "" };
+        }
+        const completed = [];
+        const pattern = /[\s\S]*?(?:[。！？…]+|[!?]+|\.(?=\s|$))["'”’）)\]]*/g;
+        let lastIndex = 0;
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+          if (!match[0]) {
+            break;
+          }
+          const sentence = match[0].replace(/\s+/g, " ").trim();
+          if (sentence) {
+            completed.push(sentence);
+          }
+          lastIndex = pattern.lastIndex;
+        }
+        return { completed, remaining: text.slice(lastIndex) };
+      }
+
+      function prependLine(log, el) {
+        log.insertBefore(el, log.firstChild);
+        log.scrollTop = 0;
       }
 
       function ensureLiveLine(side) {
@@ -443,18 +493,67 @@
         const log = side === "source" ? sourceLogEl : targetLogEl;
         let el = side === "source" ? inputLiveEl : outputLiveEl;
         if (el && el.isConnected) {
+          log.scrollTop = 0;
           return el;
         }
         el = document.createElement("p");
         el.className = "line live";
-        log.appendChild(el);
+        prependLine(log, el);
         if (side === "source") {
           inputLiveEl = el;
         } else {
           outputLiveEl = el;
         }
-        log.scrollTop = log.scrollHeight;
         return el;
+      }
+
+      function addDoneLine(side, text) {
+        if (!text) {
+          return;
+        }
+        hideEmpty(side);
+        const log = side === "source" ? sourceLogEl : targetLogEl;
+        const liveEl = side === "source" ? inputLiveEl : outputLiveEl;
+        const el = document.createElement("p");
+        el.className = "line done";
+        el.textContent = text;
+        if (liveEl && liveEl.isConnected) {
+          liveEl.insertAdjacentElement("afterend", el);
+        } else {
+          prependLine(log, el);
+        }
+        log.scrollTop = 0;
+      }
+
+      function finalizeLiveLine(side, text) {
+        const liveEl = side === "source" ? inputLiveEl : outputLiveEl;
+        if (liveEl && liveEl.isConnected) {
+          if (text) {
+            liveEl.classList.remove("live");
+            liveEl.classList.add("done");
+            liveEl.textContent = text;
+          } else {
+            liveEl.remove();
+          }
+          if (side === "source") {
+            inputLiveEl = null;
+          } else {
+            outputLiveEl = null;
+          }
+          return;
+        }
+        addDoneLine(side, text);
+      }
+
+      function rememberSealed(side, text) {
+        if (!text) {
+          return;
+        }
+        if (side === "source") {
+          inputSealed = inputSealed ? inputSealed + "\n" + text : text;
+        } else {
+          outputSealed = outputSealed ? outputSealed + "\n" + text : text;
+        }
       }
 
       function appendTranscript(side, fragment) {
@@ -462,31 +561,65 @@
           return;
         }
         if (side === "source") {
-          inputTranscript += fragment;
-          ensureLiveLine("source").textContent = inputTranscript;
+          inputTranscript = joinFragment(inputTranscript, fragment);
+          const { completed, remaining } = extractCompletedSentences(inputTranscript);
+          for (const sentence of completed) {
+            rememberSealed("source", sentence);
+            finalizeLiveLine("source", sentence);
+          }
+          inputTranscript = remaining;
+          if (remaining) {
+            ensureLiveLine("source").textContent = remaining;
+          }
         } else {
-          outputTranscript += fragment;
-          ensureLiveLine("target").textContent = outputTranscript;
+          outputTranscript = joinFragment(outputTranscript, fragment);
+          const { completed, remaining } = extractCompletedSentences(outputTranscript);
+          for (const sentence of completed) {
+            rememberSealed("target", sentence);
+            finalizeLiveLine("target", sentence);
+          }
+          outputTranscript = remaining;
+          if (remaining) {
+            ensureLiveLine("target").textContent = remaining;
+          }
+        }
+      }
+
+      function sealSide(side) {
+        if (side === "source") {
+          if (inputTranscript) {
+            rememberSealed("source", inputTranscript);
+            finalizeLiveLine("source", inputTranscript);
+            inputTranscript = "";
+          } else if (inputLiveEl) {
+            inputLiveEl.remove();
+            inputLiveEl = null;
+          }
+          return;
+        }
+        if (outputTranscript) {
+          rememberSealed("target", outputTranscript);
+          finalizeLiveLine("target", outputTranscript);
+          outputTranscript = "";
+        } else if (outputLiveEl) {
+          outputLiveEl.remove();
+          outputLiveEl = null;
         }
       }
 
       function sealTranscripts() {
-        if (inputTranscript && inputLiveEl) {
-          inputLiveEl.classList.remove("live");
-          inputLiveEl.classList.add("done");
-        }
-        if (outputTranscript && outputLiveEl) {
-          outputLiveEl.classList.remove("live");
-          outputLiveEl.classList.add("done");
-        }
-        if (inputTranscript || outputTranscript) {
-          history.push({
-            source: inputTranscript,
-            target: outputTranscript,
+        sealSide("source");
+        sealSide("target");
+        if (inputSealed || outputSealed) {
+          history.unshift({
+            source: inputSealed,
+            target: outputSealed,
             sourceLang: lastInputLang || lastDetectedCode || sourceLang,
             targetLang,
           });
         }
+        inputSealed = "";
+        outputSealed = "";
         inputTranscript = "";
         outputTranscript = "";
         inputLiveEl = null;
@@ -497,6 +630,8 @@
       function resetTranscripts(clearHistory) {
         inputTranscript = "";
         outputTranscript = "";
+        inputSealed = "";
+        outputSealed = "";
         inputLiveEl = null;
         outputLiveEl = null;
         lastInputLang = "";
@@ -504,6 +639,8 @@
           history.length = 0;
           sourceLogEl.innerHTML = '<p class="empty" id="sourceEmpty">开始后，这里显示识别出的原文</p>';
           targetLogEl.innerHTML = '<p class="empty" id="targetEmpty">译出的文字会同步出现在这里</p>';
+          sourceEmptyEl = document.getElementById("sourceEmpty");
+          targetEmptyEl = document.getElementById("targetEmpty");
         }
       }
 
@@ -959,10 +1096,16 @@
             maybeSwitchDirection(langCode);
           }
           appendTranscript("source", fragment);
+          if (serverContent.inputTranscription.finished) {
+            sealSide("source");
+          }
         }
 
         if (serverContent.outputTranscription) {
           appendTranscript("target", serverContent.outputTranscription.text || "");
+          if (serverContent.outputTranscription.finished) {
+            sealSide("target");
+          }
         }
 
         if (serverContent.modelTurn && Array.isArray(serverContent.modelTurn.parts)) {
@@ -975,6 +1118,10 @@
 
         if (serverContent.interrupted) {
           stopAudioPlayback();
+          sealTranscripts();
+        }
+
+        if (serverContent.generationComplete) {
           sealTranscripts();
         }
 
@@ -1215,15 +1362,12 @@
         swapLanguages();
       });
       copyBtn.addEventListener("click", async () => {
-        const liveSource = inputTranscript;
-        const liveTarget = outputTranscript;
-        const blocks = history.map((item, index) => {
-          return `${index + 1}. [${item.sourceLang}] ${item.source}\n   [${item.targetLang}] ${item.target}`;
-        });
-        if (liveSource || liveTarget) {
-          blocks.push(`${blocks.length + 1}. [${lastDetectedCode || sourceLang}] ${liveSource}\n   [${targetLang}] ${liveTarget}`);
-        }
-        const text = blocks.join("\n\n") || "还没有可复制的字幕";
+        const collect = (log) => [...log.querySelectorAll(".line")].map((el) => el.textContent.trim()).filter(Boolean);
+        const sourceLines = collect(sourceLogEl);
+        const targetLines = collect(targetLogEl);
+        const text =
+          [sourceLines.length ? "原文\n" + sourceLines.join("\n") : "", targetLines.length ? "译文\n" + targetLines.join("\n") : ""].filter(Boolean).join("\n\n") ||
+          "还没有可复制的字幕";
         try {
           await navigator.clipboard.writeText(text);
         } catch (_) {}

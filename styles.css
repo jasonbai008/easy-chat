@@ -96,8 +96,6 @@ button:disabled {
   width: 36px;
   height: 36px;
   border-radius: 12px;
-  display: grid;
-  place-items: center;
   background: linear-gradient(145deg, rgba(62, 224, 197, 0.9), rgba(255, 180, 90, 0.85));
   box-shadow: 0 8px 24px rgba(62, 224, 197, 0.18);
   flex: none;
@@ -283,16 +281,16 @@ button:disabled {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 4px 14px 14px;
+  padding: 6px 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 18px;
 }
 
 .line {
   margin: 0;
-  font-size: 14px;
-  line-height: 1.65;
+  font-size: 17px;
+  line-height: 1.85;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -451,6 +449,14 @@ button:disabled {
   width: 100%;
   background: rgba(4, 6, 10, 0.55);
   backdrop-filter: blur(8px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.32s ease, visibility 0.32s ease;
+}
+
+.mask.open {
+  opacity: 1;
+  visibility: visible;
 }
 
 .sheet {
@@ -459,6 +465,13 @@ button:disabled {
   align-items: flex-end;
   justify-content: center;
   padding: 16px;
+  visibility: hidden;
+  transition: visibility 0.4s;
+}
+
+.sheet.open {
+  visibility: visible;
+  transition: visibility 0s;
 }
 
 .sheet-card {
@@ -471,6 +484,13 @@ button:disabled {
   border-radius: 24px;
   background: #12141c;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
+  transform: translateY(calc(100% + 32px));
+  transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
+}
+
+.sheet.open .sheet-card {
+  transform: translateY(0);
 }
 
 .sheet-head {
@@ -529,6 +549,13 @@ button:disabled {
 
 .hidden {
   display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mask,
+  .sheet-card {
+    transition: none;
+  }
 }
 
 @keyframes waveBreath {
